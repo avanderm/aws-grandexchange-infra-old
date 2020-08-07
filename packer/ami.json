@@ -1,0 +1,41 @@
+{
+    "variables": {
+        "ami_base_name": "grandexchange",
+        "ami_version": "1.0.0"
+    },
+    "builders": [
+        {
+            "name": "tracker",
+            "type": "amazon-ebs",
+            "instance_type": "t3.micro",
+            "ami_name": "{{user `ami_base_name`}}-{{user `ami_version`}}",
+            "region": "eu-west-1",
+            "ssh_username": "ec2-user",
+            "source_ami_filter": {
+                "filters": {
+                    "virtualization-type": "hvm",
+                    "name": "amzn2-ami-hvm-*-x86_64-gp2",
+                    "root-device-type": "ebs"
+                },
+                "most_recent": true
+            }
+        }
+    ],
+    "provisioners": [
+        {
+            "type": "shell",
+            "inline": [
+                "sudo yum update -y",
+                "sudo yum install git gcc -y",
+                "sudo yum install sqlite-devel zlib-devel bzip2-devel readline-devel openssl-devel -y"
+            ]
+        },
+        {
+            "type": "shell",
+            "scripts": [
+                "scripts/python.sh",
+                "scripts/tick.sh"
+            ]
+        }
+    ]
+}
