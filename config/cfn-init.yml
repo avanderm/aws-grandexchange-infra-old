@@ -1,0 +1,17 @@
+services:
+  sysvinit:
+    codedeploy-agent:
+      enabled: true
+      ensureRunning: true
+    influxdb:
+      enabled: true
+      ensureRunning: true
+    telegraf:
+      enabled: true
+      ensureRunning: true
+    kapacitor:
+      enabled: true
+      ensureRunning: true
+    chronograf:
+      enabled: true
+      ensureRunning: true

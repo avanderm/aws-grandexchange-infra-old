@@ -3,7 +3,9 @@ import * as cfn from '@aws-cdk/aws-cloudformation';
 import * as ec2 from '@aws-cdk/aws-ec2';
 import * as iam from '@aws-cdk/aws-iam';
 import * as s3 from '@aws-cdk/aws-s3';
-import { CfnInstance } from '@aws-cdk/aws-ec2';
+
+import fs = require('fs');
+import yaml = require('yaml');
 
 interface ServerStackProps extends cdk.StackProps {
     artifactBucket: s3.IBucket;
@@ -104,7 +106,7 @@ export class ServerStack extends cdk.Stack {
         });
 
         // we want the scope-unique id (stack scope), not the app-unique id
-        const serverLogicalId = this.getLogicalId(instance.node.defaultChild as CfnInstance);
+        const serverLogicalId = this.getLogicalId(instance.node.defaultChild as ec2.CfnInstance);
 
         userData.addExecuteFileCommand({
             filePath: setupScript,
@@ -114,16 +116,7 @@ export class ServerStack extends cdk.Stack {
         const cfnInstance = instance.node.defaultChild as ec2.CfnInstance;
 
         cfnInstance.cfnOptions.metadata = {
-            "AWS::CloudFormation::Init": {
-                "services": {
-                    "sysvint": {
-                        "codedeploy-agent": {
-                            "enabled": "true",
-                            "ensureRunning": "true"
-                        }
-                    }
-                }
-            }
+            "AWS::CloudFormation::Init": yaml.parse(fs.readFileSync('./config/cfn-init.yml', 'utf-8'))
         };
     }
 }
