@@ -10,7 +10,8 @@ const region = process.env.CDK_DEPLOY_REGION || process.env.CDK_DEFAULT_REGION;
 
 const app = new cdk.App();
 
-const artifactBucket = `aws-codepipeline-${account}-${region}`;
+const artifactBucket = app.node.tryGetContext('artifactBucket') || `aws-codepipeline-${account}-${region}`;
+const instanceAmi = app.node.tryGetContext('instanceAmi') || 'dud';
 const vpcId = app.node.tryGetContext('vpcId') || 'dud';
 
 const githubTokenParameter = app.node.tryGetContext('githubTokenParameter') || 'dud';
@@ -46,6 +47,7 @@ new ServerStack(app, 'ServerStack', {
         Project: 'GrandExchange'
     },
     artifactBucket: externalResources.artifactBucket,
+    instanceAmi: instanceAmi,
     keyName: 'avanderm',
     vpc: externalResources.vpc
 });
