@@ -6,6 +6,7 @@ import * as s3 from '@aws-cdk/aws-s3';
 
 import fs = require('fs');
 import yaml = require('yaml');
+import { readFileSync } from 'fs';
 
 interface ServerStackProps extends cdk.StackProps {
     artifactBucket: s3.IBucket;
@@ -68,20 +69,9 @@ export class ServerStack extends cdk.Stack {
         securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(8888), 'Chronograf access');
         securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(22), 'SSH access');
 
-        const waitHandle = new cfn.CfnWaitConditionHandle(this, 'CodeDeployInstallHandle');
-
-        const waitCondition = new cfn.CfnWaitCondition(this, 'CodeDeployInstall', {
-            handle: waitHandle.ref,
-            timeout: "4500"
-        });
-
         const serverResourceName = 'ServerInstance';
 
         const userData = ec2.UserData.forLinux();
-        const setupScript = userData.addS3DownloadCommand({
-            bucket: props.artifactBucket,
-            bucketKey: 'setup.sh'
-        });
 
         const instance = new ec2.Instance(this, 'Server', {
             blockDevices: [
@@ -105,18 +95,63 @@ export class ServerStack extends cdk.Stack {
             }
         });
 
-        // we want the scope-unique id (stack scope), not the app-unique id
-        const serverLogicalId = this.getLogicalId(instance.node.defaultChild as ec2.CfnInstance);
-
-        userData.addExecuteFileCommand({
-            filePath: setupScript,
-            arguments: `${stackId} ${region} "${waitHandle.ref}" "${serverLogicalId}"`
-        });
-
         const cfnInstance = instance.node.defaultChild as ec2.CfnInstance;
 
+        userData.addCommands(
+            "yum -y update",
+            "yum -y install cfn-bootstrap",
+            `/opt/aws/bin/cfn-init -v --stack ${stackId} --resource ${this.getLogicalId(cfnInstance)} --region ${region}`
+        )
+
         cfnInstance.cfnOptions.metadata = {
-            "AWS::CloudFormation::Init": yaml.parse(fs.readFileSync('./config/cfn-init.yml', 'utf-8'))
+            "AWS::CloudFormation::Init": {
+                "config": {
+                    "packages": {
+                        "yum": {
+                            "ruby": []
+                        }
+                    },
+                    "files": {
+                        "/home/ec2-user/install": {
+                            "source": `https://aws-codedeploy-${region}.s3.amazonaws.com/latest/install`,
+                            "mode": "000755"
+                        }
+                    },
+                    "commands": {
+                        "00-install-agent": {
+                            "command": "./install auto",
+                            "cwd": "/home/ec2-user/"
+                        },
+                        "01-cfn-signal": {
+                            "command": `/opt/aws/bin/cfn-signal -e 0 --stack ${stackId} --resource ${this.getLogicalId(cfnInstance)} --region ${region}`
+                        }
+                    },
+                    "services": {
+                        "sysvinit": {
+                            "codedeploy-agent": {
+                                "enabled": true,
+                                "ensureRunning": true
+                            },
+                            "influxdb": {
+                                "enabled": true,
+                                "ensureRunning": true
+                            },
+                            "telegraf": {
+                                "enabled": true,
+                                "ensureRunning": true
+                            },
+                            "kapacitor": {
+                                "enabled": true,
+                                "ensureRunning": true
+                            },
+                            "chronograf": {
+                                "enabled": true,
+                                "ensureRunning": true
+                            }
+                        }
+                    }
+                }
+            }
         };
     }
 }

@@ -37,7 +37,7 @@ new AgentStack(app, 'InfluxAgentStack', {
     }
 });
 
-new ServerStack(app, 'ServerStack', {
+new ServerStack(app, 'GrandExchangeServerStack', {
     env: {
         account: account,
         region: region
