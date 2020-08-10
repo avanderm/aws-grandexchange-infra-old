@@ -45,7 +45,8 @@ export class ServerStack extends cdk.Stack {
                 new iam.PolicyStatement({
                     actions: [
                         "s3:Get*",
-                        "s3:List*"
+                        "s3:List*",
+                        "s3:Put*"
                     ],
                     resources: [
                         "*"
@@ -56,15 +57,16 @@ export class ServerStack extends cdk.Stack {
 
         instanceRolePolicy.attachToRole(instanceRole);
 
-        const volume = ec2.BlockDeviceVolume.ebs(20, {
-            deleteOnTermination: false,
-            volumeType: ec2.EbsDeviceVolumeType.STANDARD
-        });
+        // const volume = ec2.BlockDeviceVolume.ebs(20, {
+        //     deleteOnTermination: true,
+        //     volumeType: ec2.EbsDeviceVolumeType.STANDARD
+        // });
 
         const securityGroup = new ec2.SecurityGroup(this, 'SecurityGroup', {
             vpc: props.vpc
         });
 
+        securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(80), 'certbot');
         securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(8086), 'InfluxDB access');
         securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(8888), 'Chronograf access');
         securityGroup.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(22), 'SSH access');
@@ -74,12 +76,12 @@ export class ServerStack extends cdk.Stack {
         const userData = ec2.UserData.forLinux();
 
         const instance = new ec2.Instance(this, 'Server', {
-            blockDevices: [
-                {
-                    deviceName: '/dev/sdf',
-                    volume: volume
-                }
-            ],
+            // blockDevices: [
+            //     {
+            //         deviceName: '/dev/sdf',
+            //         volume: volume
+            //     }
+            // ],
             instanceName: serverResourceName,
             instanceType: new ec2.InstanceType('t3a.small'),
             machineImage: ec2.MachineImage.genericLinux({
@@ -105,10 +107,17 @@ export class ServerStack extends cdk.Stack {
 
         cfnInstance.cfnOptions.metadata = {
             "AWS::CloudFormation::Init": {
-                "config": {
+                "configSets": {
+                    "default": [
+                        "codedeploy",
+                        "tick",
+                        "ssl-setup"
+                    ]
+                },
+                "codedeploy": {
                     "packages": {
                         "yum": {
-                            "ruby": []
+                            "ruby": [],
                         }
                     },
                     "files": {
@@ -121,9 +130,6 @@ export class ServerStack extends cdk.Stack {
                         "00-install-agent": {
                             "command": "./install auto",
                             "cwd": "/home/ec2-user/"
-                        },
-                        "01-cfn-signal": {
-                            "command": `/opt/aws/bin/cfn-signal -e 0 --stack ${stackId} --resource ${this.getLogicalId(cfnInstance)} --region ${region}`
                         }
                     },
                     "services": {
@@ -131,7 +137,18 @@ export class ServerStack extends cdk.Stack {
                             "codedeploy-agent": {
                                 "enabled": true,
                                 "ensureRunning": true
-                            },
+                            }
+                        }
+                    }
+                },
+                "tick": {
+                    "commands": {
+                        "00-cfn-signal": {
+                            "command": `/opt/aws/bin/cfn-signal -e 0 --stack ${stackId} --resource ${this.getLogicalId(cfnInstance)} --region ${region}`
+                        }
+                    },
+                    "services": {
+                        "sysvinit": {
                             "influxdb": {
                                 "enabled": true,
                                 "ensureRunning": true
@@ -148,6 +165,29 @@ export class ServerStack extends cdk.Stack {
                                 "enabled": true,
                                 "ensureRunning": true
                             }
+                        }
+                    }
+                },
+                "ssl-setup": {
+                    "packages": {
+                        "rpm": {
+                            "epel": "https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm"
+                        },
+                        "yum": {
+                            "certbot": []
+                        }
+                    },
+                    "groups": {
+                        "ssl-access": {}
+                    },
+                    "commands" {
+                        "00-usermod": {
+                            "command": [
+                                "usermod -aG ssl-access influxdb",
+                                "usermod -aG ssl-access telegraf",
+                                "usermod -aG ssl-access kapacitor",
+                                "usermod -aG ssl-access chronograf"
+                            ]
                         }
                     }
                 }
