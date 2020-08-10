@@ -1,13 +1,32 @@
 {
     "variables": {
-        "ami_base_name": "grandexchange",
-        "ami_version": "1.0.0",
+        "ami_base_name": "test",
+        "ami_version": "1.1.0",
+        "kms_key_id": "{{env `KMS_KEY_ID`}}",
         "subnet_id": "{{env `SUBNET_ID`}}"
     },
     "builders": [
         {
             "ami_name": "{{user `ami_base_name`}}-{{user `ami_version`}}",
+            "ami_block_device_mappings": [
+                {
+                    "delete_on_termination": true,
+                    "device_name": "/dev/sde",
+                    "volume_type": "gp2",
+                    "volume_size": "20"
+                }
+            ],
             "instance_type": "t3.micro",
+            "launch_block_device_mappings": [
+                {
+                    "delete_on_termination": true,
+                    "device_name": "/dev/sde",
+                    "encrypted": true,
+                    "kms_key_id": "{{user `kms_key_id`}}",
+                    "volume_type": "gp2",
+                    "volume_size": "20"
+                }
+            ],
             "name": "tracker",
             "region": "eu-west-1",
             "source_ami_filter": {
@@ -36,6 +55,7 @@
         {
             "type": "shell",
             "scripts": [
+                "scripts/volume.sh",
                 "scripts/python.sh",
                 "scripts/tick.sh"
             ]
